@@ -344,38 +344,85 @@ class Game:
             dict: The highest card in the round.
         """
 
-        # Assuming the cards have a rank attribute
-        # (e.g., {"rank": "10", "suit": "h"})
+        # First, find all the trump cards
+        trumpCards = [card for card in cards if card["suit"] == self.trumpSuit]
+        if len(trumpCards) > 0:
+            # If there are trump cards, then find the highest trump card
+            return max(
+                trumpCards,
+                key=lambda x: (self.ranks.index(x["rank"]), random.random()),
+            )
+
+        # If there are no trump cards, then find the highest card
         return max(
             cards,
             key=lambda x: (self.ranks.index(x["rank"]), random.random()),
         )
 
     def playRound(self):
-        """
-        Plays a round of Tarneeb.
-        """
+        """ Plays a round of Tarneeb. """
 
-        cards = [
-            self.players["team1"]["player1"].cards.pop(),
-            self.players["team1"]["player2"].cards.pop(),
-            self.players["team2"]["player3"].cards.pop(),
-            self.players["team2"]["player4"].cards.pop(),
-        ]
+        # Get the highest bidder
+        highestBidder = list(self.highestBid.keys())[0]
 
-        player = None
+        # Play the highest card from the highest bidder
+        team = None
+        if highestBidder == "player1" or highestBidder == "player2":
+            team = "team1"
+        else:
+            team = "team2"
+
+        cards = self.players[team][highestBidder].cards
         highestCard = self.determineHighestCard(cards)
 
-        if highestCard == cards[0]:
-            player = "player1"
-        elif highestCard == cards[1]:
-            player = "player2"
-        elif highestCard == cards[2]:
-            player = "player3"
-        elif highestCard == cards[3]:
-            player = "player4"
+        print(f"The trump suit is {self.trumpSuit.upper()}.")
+        print(f"Player 4: {self.displayCard(highestCard)}")
 
-        return cards, highestCard, player
+        player1Card = self.displayCardToDict(input("Player 1: "))
+        player2Card = self.displayCardToDict(input("Player 2: "))
+        player3Card = self.displayCardToDict(input("Player 3: "))
+
+        playedCards = [
+            player1Card,
+            player2Card,
+            player3Card,
+            highestCard,
+        ]
+
+        highestPlayedCard = self.determineHighestCard(playedCards)
+        wonPlayer = playedCards.index(highestPlayedCard) + 1
+        print(f"Player {wonPlayer} won the round.")
+
+    def displayCard(self, card):
+        """
+        Displays a card in a human-readable format.
+        EXM: {"rank": "2", "suit": "h"} -> 2H
+
+        Args:
+            card (dict): Card to display.
+
+        Returns:
+            string: String representation of the card.
+        """
+
+        return f"{card['rank']}{card['suit'].upper()}"
+
+    def displayCardToDict(self, card):
+        """
+        Converts a human-readable card to a dictionary.
+        EXM: 2H -> {"rank": "2", "suit": "h"}
+
+        Args:
+            card (string): Card to convert.
+
+        Returns:
+            dict: Dictionary representation of the card.
+        """
+
+        return {
+            "rank": card[0],
+            "suit": card[1].lower(),
+        }
 
 
 def main():
