@@ -1,451 +1,327 @@
-"""
-Tarneeb is a trick-taking card game for four players. The game is played
-with a standard 52-card deck. The goal of the game is to win the most
-tricks.
-"""
-
-import argparse
-import pprint
+import os
 import random
+import time
 
 
-class Hand:
-    """
-    Hand class that represents a player's hand of cards.
-
-    Attributes:
-        cards (list): List of cards in the player's hand.
-    """
-
-    def __init__(self, cards, bid=None):
-        """
-        Hand class that represents a player's hand of cards.
-
-        Args:
-            cards (list): List of cards in the player's hand.
-            bid (int): Bid of the player.
-        """
-
-        self.cards = cards
-        self.cardValues = [self.calculateCardValue(card) for card in cards]
-        self.handValue = self.calculateHandValue()
-        self.playerBid = bid if bid is not None else self.bid()
-        self.suitCounts = self.getSuitCounts()
-
-    def __repr__(self):
-        """
-        Returns a string representation of the Hand class.
-
-        Returns:
-            string: String representation of the Hand class.
-        """
-
-        return pprint.pformat(
-            {
-                "cards": self.cards,
-                "bid": self.playerBid,
-            }
-        )
-
-    def calculateCardValue(self, card):
-        """
-        Calculates the value of a card based on the rest of the hand. The value
-        of the card is calculated by multiplying the rank (2-10, J=11, Q=12,
-        K=13, A=15) by the number of cards with the same suit.
-
-        Args:
-            card (dict): Card to calculate the value of.
-
-        Returns:
-            int: Value of the card.
-        """
-
-        rankValue = card["rank"]
-        if rankValue == "J":
-            rankValue = 11
-        elif rankValue == "Q":
-            rankValue = 12
-        elif rankValue == "K":
-            rankValue = 13
-        elif rankValue == "A":
-            rankValue = 15
-        else:
-            rankValue = int(rankValue)
-
-        numCardsWithSameSuit = len(
-            [card for card in self.cards if card["suit"] == card["suit"]]
-        )
-
-        return rankValue * numCardsWithSameSuit
-
-    def calculateHandValue(self):
-        """
-        Calculates the value of the player's hand.
-
-        Returns:
-            int: Value of the player's hand.
-        """
-
-        # The hand value is calculated by adding the value of each card in the
-        # hand.
-        return sum(self.cardValues)
-
-    def getSuitCounts(self):
-        """
-        Gets the value of each suit in the player's hand based on the
-        cards in the hand.
-
-        Returns:
-            dict: Dictionary of the suit counts.
-        """
-
-        suitCounts = {"h": 0, "s": 0, "d": 0, "c": 0}
-        suitCountsTemp = {"h": 0, "s": 0, "d": 0, "c": 0}
-
-        for card in self.cards:
-            suitCounts[card["suit"]] += 1
-
-        # Iterate over the cards
-        for x, card in enumerate(self.cards):
-            suitCountsTemp[card["suit"]] += self.cardValues[x]
-
-        # Multiply the suit counts by the card values
-        for suit in suitCountsTemp:
-            suitCounts[suit] *= suitCountsTemp[suit]
-
-        return suitCounts
-
-    def bid(self):
-        """
-        Calculates the bid of the player based on the cards in the hand.
-
-        The bid calculated as follows:
-        1. If the hand value is less than 1000, pass
-        2. If the hand value is between 1000 and 1200, bid 7
-        3. If the hand value is between 1200 and 1400, bid 8
-        4. If the hand value is between 1400 and 1600, bid 9
-        5. If the hand value is between 1600 and 1800, bid 10
-        6. If the hand value is between 1800 and 2000, bid 11
-        7. If the hand value is between 2000 and 2200, bid 12
-        8. If the hand value is greater than 2200, bid 13
-
-        Returns:
-            int: Bid of the player.
-        """
-
-        if self.handValue < 1000:
-            return "p"
-        elif 1000 <= self.handValue < 1200:
-            return 7
-        elif 1200 <= self.handValue < 1400:
-            return 8
-        elif 1400 <= self.handValue < 1600:
-            return 9
-        elif 1600 <= self.handValue < 1800:
-            return 10
-        elif 1800 <= self.handValue < 2000:
-            return 11
-        elif 2000 <= self.handValue < 2200:
-            return 12
-        elif 2200 <= self.handValue:
-            return 13
-
-
-class Game:
-    """
-    Game class that represents a game of Tarneeb.
-
-    Attributes:
-        deck (list): A list of cards in the deck.
-        players (dict): A dictionary of players in the game.
-        trump_suit (str): The trump suit of the game.
-        teamBids (dict): A dictionary of the bids of each team.
-        highestBid (dict): A dictionary of the highest bid of each team.
-    """
-
-    def __init__(self, player1Bid, player2Bid, player3Bid) -> None:
-        """
-        Game class that represents a game of Tarneeb.
-
-        Args:
-            player1Bid (int): Bid of player 1.
-            player2Bid (int): Bid of player 2.
-            player3Bid (int): Bid of player 3.
-        """
-
-        self.ranks = ["2", "3", "4", "5", "6", "7", "8", "9", "10",
-                      "J", "Q", "K", "A"]
-        self.suits = ["h", "s", "d", "c"]
-
-        self.deck = self.generateDeck()
-        self.players = {
-            "team1": {
-                "score": 0,
-                "player1": Hand(self.deck[0:13], player1Bid),
-                "player2": Hand(self.deck[13:26], player2Bid),
-            },
-            "team2": {
-                "score": 0,
-                "player3": Hand(self.deck[26:39], player3Bid),
-                "player4": Hand(self.deck[39:52]),
-            },
+class Card:
+    def __init__(self, suit, rank):
+        self.suit = suit
+        self.rank = rank
+        self.display = f"{rank} of {suit}"
+        self.dictHand = {
+            "rank": rank,
+            "suit": suit[0].lower(),
         }
 
-        self.tricks = {player: [] for player in self.players}
-
-        self.trumpSuit = self.determineTrumpSuit(
-            self.players["team1"]["player1"],
-        )
-
-        self.teamBids = {
-            "team1": {
-                "player1": player1Bid,
-                "player2": player2Bid,
-            },
-            "team2": {
-                "player3": player3Bid,
-                "player4": self.players["team2"]["player4"].bid(),
-            },
-        }
-
-        self.highestBid = self.findHighestBidder()
-
     def __repr__(self):
-        """
-        Returns a string representation of the Game class.
+        return self.display
 
-        Returns:
-            string: String representation of the Game class.
-        """
 
-        return pprint.pformat(self.players)
-
-    def generateDeck(self):
-        """
-        Generates a deck of cards.
-
-        Returns:
-            list: List of cards in the deck.
-        """
-
-        suits = ["h", "s", "d", "c"]
+class Deck:
+    def __init__(self):
+        suits = ["Hearts", "Diamonds", "Clubs", "Spades"]
         ranks = ["2", "3", "4", "5", "6", "7", "8", "9", "10",
-                 "J", "Q", "K", "A"]
+                 "Jack", "Queen", "King", "Ace"]
 
-        deck = [
-            {"rank": rank, "suit": suit}
-            for suit in suits
-            for rank in ranks
-        ]
+        self.cards = [Card(suit, rank) for suit in suits for rank in ranks]
 
-        random.shuffle(deck)
+    def shuffle(self):
+        random.shuffle(self.cards)
 
-        return deck
+    def deal(self, numCards):
+        dealtCards = self.cards[:numCards]
+        self.cards = self.cards[numCards:]
+        return dealtCards
 
-    def determineTrumpSuit(self, player):
-        """
-        Determines the trump suit of the game.
 
-        Args:
-            player (Hand): Player to determine the trump suit of.
+class Player:
+    def __init__(self, name):
+        self.name = name
+        self.hand = []
+        self.bid = None
 
-        Returns:
-            str: Trump suit of the game.
-        """
+    def clearHand(self):
+        self.hand = []
 
-        # Get the suit counts from the Hand class
-        suits = player.getSuitCounts()
+    def addCard(self, card):
+        self.hand.append(card)
 
-        # Get the suit that has the highest value from the Hand function
-        highestSuit = max(suits.items(), key=lambda x: (x[1], random.random()))
+    def playCard(self, cardIndex):
+        return self.hand.pop(cardIndex)
 
-        # Detuple the result
-        return highestSuit[0]
+    def showHand(self):
+        return [str(card) for card in self.hand]
 
-    def findHighestBidder(self):
-        """
-        Finds the highest bidder of the game.
-
-        Returns:
-            dict: Dictionary of the highest bidder and their bid.
-        """
-
-        # Get the highest bidder from the teamBids dictionary
-        highestBidder = max(
-            (
-                (player, int(bid) if bid != "p" else 0)
-                for team in self.teamBids.values()
-                for player, bid in team.items()
+    def organizeHand(self):
+        suitOrder = {"Hearts": 0, "Spades": 1, "Diamonds": 2, "Clubs": 3}
+        self.hand = sorted(
+            self.hand,
+            key=lambda card: (
+                suitOrder[card.suit],
+                -self._cardSortKey(card),
             ),
-            key=lambda x: (x[1], random.random()),
         )
 
-        # Detuple the result
-        return {highestBidder[0]: highestBidder[1]}
+    def _cardSortKey(self, card):
+        rankOrder = {
+            "2": 1, "3": 2, "4": 3, "5": 4, "6": 5,
+            "7": 6, "8": 7, "9": 8, "10": 9,
+            "Jack": 10, "Queen": 11, "King": 12, "Ace": 13,
+        }
 
-    def checkBids(self):
-        """
-        Checks the bids of each player to make sure they are valid.
+        return rankOrder[card.rank]
 
-        Raises:
-            ValueError: If the bid is not between 7 and 13.
-            ValueError: If the bid is not greater than the previous bid.
-            ValueError: If the bid is not an integer.
-            ValueError: If the bid is not a valid bid.
-            ValueError: If the bid is not a valid bid.
-            ValueError: If the bid is not a valid bid.
-        """
+    def setBid(self, bid):
+        if bid:
+            self.bid = int(bid)
+        else:
+            self.bid = None
 
-        player1Bid = self.teamBids["team1"]["player1"]
-        player2Bid = self.teamBids["team1"]["player2"]
-        player3Bid = self.teamBids["team2"]["player3"]
 
-        # If the bid is "p", then the player passes and set it to None
-        player1Bid = None if player1Bid == "p" else int(player1Bid)
-        player2Bid = None if player2Bid == "p" else int(player2Bid)
-        player3Bid = None if player3Bid == "p" else int(player3Bid)
+class TarneebGame:
+    def __init__(self, playerNames):
+        self.deck = Deck()
+        self.deck.shuffle()
 
-        # If the bids are not between 7 and 13, then raise an error
-        if player1Bid is not None and not (7 <= player1Bid <= 13):
-            raise ValueError("Player 1 bid must be between 7 and 13.")
-        elif player2Bid is not None and not (7 <= player2Bid <= 13):
-            raise ValueError("Player 2 bid must be between 7 and 13.")
-        elif player3Bid is not None and not (7 <= player3Bid <= 13):
-            raise ValueError("Player 3 bid must be between 7 and 13.")
+        self.round = 0
+        self.firstPlayedSuit = None
+        self.trump = None
+        self.prevWinner = None
 
-        # Each bid must be greater than the previous bid
-        if (
-            player1Bid is not None
-            and player2Bid is not None
-            and not player1Bid < player2Bid
-        ):
-            raise ValueError("Player 1 bid must be greater than player 2 bid.")
-        elif (
-            player2Bid is not None
-            and player3Bid is not None
-            and not player2Bid < player3Bid
-        ):
-            raise ValueError("Player 2 bid must be greater than player 3 bid.")
-        elif (
-            player1Bid is not None
-            and player3Bid is not None
-            and not player1Bid < player3Bid
-        ):
-            raise ValueError("Player 1 bid must be greater than player 3 bid.")
+        self.scores = [0, 0]
+        self.curScores = [0, 0]
+        self.playedCards = []
 
-    def determineHighestCard(self, cards):
-        """
-        Determines the highest card in a round.
+        self.highestBid = {"bid": None, "player": ""}
+        self.players = [Player(name) for name in playerNames]
 
-        Args:
-            cards (list): List of cards in the round.
+    def cleanHands(self):
+        for player in self.players:
+            player.clearHand()
 
-        Returns:
-            dict: The highest card in the round.
-        """
+    def dealDeck(self):
+        self.cleanHands()
+        for _ in range(13):
+            for player in self.players:
+                if not self.deck.cards:
+                    self.deck = Deck()
+                    self.deck.shuffle()
 
-        # First, find all the trump cards
-        trumpCards = [card for card in cards if card["suit"] == self.trumpSuit]
-        if len(trumpCards) > 0:
-            # If there are trump cards, then find the highest trump card
-            return max(
-                trumpCards,
-                key=lambda x: (self.ranks.index(x["rank"]), random.random()),
+                player.addCard(self.deck.deal(1)[0])
+
+        for player in self.players:
+            player.organizeHand()
+
+    def displayHands(self):
+        for player in self.players:
+            print(f"{player.name}'s hand: {', '.join(player.showHand())}\n")
+
+    def getBid(self, player):
+        highestBid = self.highestBid["bid"] or 7
+        name = player.name
+
+        while True:
+            try:
+                bid = input(f"{name}, enter your bid ({highestBid}-13): ")
+                if bid == "":
+                    return None
+                elif 7 <= int(bid) <= 13:
+                    return bid
+                else:
+                    print("Invalid bid. Please enter between 7 and 13.")
+            except ValueError:
+                print("Invalid input. Please enter a valid number.")
+
+    def getBids(self):
+        for player in self.players:
+            while True:
+                bid = self.getBid(player)
+                highestBid = self.highestBid["bid"]
+                if bid:
+                    bid = int(bid)
+                else:
+                    bid = None
+
+                if highestBid and bid and highestBid >= bid:
+                    print("Invalid bid. Please enter a higher bid.")
+                else:
+                    if bid and (not highestBid or bid > highestBid):
+                        self.highestBid["bid"] = bid
+                        self.highestBid["player"] = player.name
+                    break
+
+            player.setBid(bid)
+            if not bid:
+                print(f"{player.name} passes")
+            else:
+                print(f"{player.name} bids {bid}")
+
+        if not self.highestBid["bid"]:
+            os.system("clear")
+            print("No one bid; restarting round.\n")
+
+            self.dealDeck()
+            self.playRound()
+
+        print(f"\n{self.highestBid['player']} won the bid.\n")
+        self.trump = input("Enter trump suit (h, s, d, c): ")
+        print()
+
+        while self.trump not in ["h", "s", "d", "c"]:
+            print(
+                "Invalid suit. Please enter",
+                "h (hearts), s (spades), d (diamonds), or c (clubs).",
             )
-
-        # If there are no trump cards, then find the highest card
-        return max(
-            cards,
-            key=lambda x: (self.ranks.index(x["rank"]), random.random()),
-        )
+            self.trump = input("Enter trump suit (h, s, d, c): ")
+            print()
 
     def playRound(self):
-        """ Plays a round of Tarneeb. """
+        print(f"Round {self.round} started.\n")
+        self.displayHands()
 
-        # Get the highest bidder
-        highestBidder = list(self.highestBid.keys())[0]
+        if self.round == 1:
+            self.getBids()
 
-        # Play the highest card from the highest bidder
-        team = None
-        if highestBidder == "player1" or highestBidder == "player2":
-            team = "team1"
+        # Determine the order of players based on the bid winner
+        if self.round == 1:
+            startIndex = self.players.index(
+                next(
+                    player
+                    for player in self.players
+                    if player.name == self.highestBid["player"]
+                )
+            )
         else:
-            team = "team2"
+            startIndex = 0
+            if self.prevWinner:
+                winner = self.prevWinner
+                startIndex = self.players.index(winner)
 
-        cards = self.players[team][highestBidder].cards
-        highestCard = self.determineHighestCard(cards)
+        self.players = self.players[startIndex:] + self.players[:startIndex]
 
-        print(f"The trump suit is {self.trumpSuit.upper()}.")
-        print(f"Player 4: {self.displayCard(highestCard)}")
+        os.system("clear")
+        print(
+            f"Round {self.round} started",
+            f"(trump: {self.trump}) ({'-'.join(map(str, self.curScores))}).\n"
+        )
+        self.getCards()
 
-        player1Card = self.displayCardToDict(input("Player 1: "))
-        player2Card = self.displayCardToDict(input("Player 2: "))
-        player3Card = self.displayCardToDict(input("Player 3: "))
+    def getCards(self):
+        for i, player in enumerate(self.players):
+            name = player.name
+            print(f"{name}'s hand: {', '.join(player.showHand())}")
 
-        playedCards = [
-            player1Card,
-            player2Card,
-            player3Card,
-            highestCard,
-        ]
+            while True:
+                cardIndex = input(
+                    f"{name}, enter the index of the card you want to play: "
+                )
 
-        highestPlayedCard = self.determineHighestCard(playedCards)
-        wonPlayer = playedCards.index(highestPlayedCard) + 1
-        print(f"Player {wonPlayer} won the round.")
+                try:
+                    cardIndex = int(cardIndex)
+                    if 0 <= cardIndex < len(player.hand):
+                        card = player.hand[cardIndex]
+                        if i == 0:
+                            if card.suit == self.trump:
+                                self.firstPlayedSuit = self.trump
+                            else:
+                                self.firstPlayedSuit = card.suit
+                        break
+                    else:
+                        print("Invalid index. Please enter a valid index.")
+                except ValueError:
+                    print("Invalid input. Please enter a valid number.")
 
-    def displayCard(self, card):
-        """
-        Displays a card in a human-readable format.
-        EXM: {"rank": "2", "suit": "h"} -> 2H
+            player.playCard(cardIndex)
+            self.playedCards.append({
+                "card": card,
+                "player": player,
+            })
+            print(f"{player.name} played {card}")
+            print()
 
-        Args:
-            card (dict): Card to display.
+        self.prevWinner = self.determineWinner()
 
-        Returns:
-            string: String representation of the card.
-        """
+        self.playedCards = []
 
-        return f"{card['rank']}{card['suit'].upper()}"
-
-    def displayCardToDict(self, card):
-        """
-        Converts a human-readable card to a dictionary.
-        EXM: 2H -> {"rank": "2", "suit": "h"}
-
-        Args:
-            card (string): Card to convert.
-
-        Returns:
-            dict: Dictionary representation of the card.
-        """
-
-        return {
-            "rank": card[0],
-            "suit": card[1].lower(),
+    def _cardSortKey(self, card):
+        rankOrder = {
+            "2": 1, "3": 2, "4": 3, "5": 4, "6": 5,
+            "7": 6, "8": 7, "9": 8, "10": 9,
+            "Jack": 10, "Queen": 11, "King": 12, "Ace": 13,
         }
 
+        return rankOrder[card.rank]
 
-def main():
-    # Create the parser
-    parser = argparse.ArgumentParser()
+    def _suitSortKey(self, suit):
+        suitOrder = {"Hearts": 0, "Spades": 1, "Diamonds": 2, "Clubs": 3}
+        return suitOrder[suit]
 
-    # Add arguments
-    parser.add_argument(
-        "-pb",
-        "--player-bids",
-        type=str,
-        required=True,
-        help="A list of the player bids.",
-    )
+    def determineWinner(self):
+        trumpCards = [
+            card for card in self.playedCards if card["card"].suit[0].lower() == self.trump
+        ]
 
-    # Parse arguments
-    args = parser.parse_args()
+        if trumpCards:
+            winningTrump = max(
+                trumpCards, key=lambda card: self._cardSortKey(card["card"])
+            )
+            winningPlayer = winningTrump["player"]
+            winningCard = winningTrump["card"]
+        else:
+            sortedCards = sorted(
+                self.playedCards,
+                key=lambda card: (
+                    -self._cardSortKey(card["card"]),
+                    self._suitSortKey(card["card"].suit),
+                ),
+            )
+            winningPlayer = sortedCards[0]["player"]
+            winningCard = sortedCards[0]["card"]
 
-    player1Bid, player2Bid, player3Bid = args.player_bids.split(",")
-    game = Game(player1Bid, player2Bid, player3Bid)
+        print(f"{winningPlayer.name} wins the round with {winningCard}!")
 
-    game.playRound()
+        if winningPlayer.name in ["Player 1", "Player 3"]:
+            self.curScores[0] += 1
+        else:
+            self.curScores[1] += 1
+
+        self.playedCards = []
+
+        return winningPlayer
+
+    def playGame(self):
+        while max(self.scores) < 60:
+            self.dealDeck()
+
+            for _ in range(13):
+                self.round += 1
+                self.playRound()
+
+                time.sleep(3)
+                os.system("clear")
+
+                self.highestBid = {"bid": None, "player": ""}
+
+            n = 0
+            N = 1
+            if self.highestBid["player"] in ["Player 1", "Player 3"]:
+                n = 0
+                N = 1
+            else:
+                n = 1
+                N = 0
+
+            if self.curScores[n] >= self.highestBid["bid"]:
+                self.scores[n] += self.curScores[n]
+            else:
+                self.scores[n] -= self.highestBid["bid"]
+                self.scores[N] += self.curScores[N]
+
+            self.round = 0
+            self.curScores = [0, 0]
 
 
 if __name__ == "__main__":
-    main()
+    playerNames = ["Player 1", "Player 2", "Player 3", "Player 4"]
+    game = TarneebGame(playerNames)
+    game.playGame()
